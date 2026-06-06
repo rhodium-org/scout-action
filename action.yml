@@ -1,0 +1,174 @@
+name: 'scout findings gate'
+description: >
+  Run scout gap-analysis against this repo's specs and post a findings
+  comment on the PR. Default mode is report-only; opt into stricter
+  gating with the `strictness` input.
+author: 'rhodium-org'
+branding:
+  icon: 'search'
+  color: 'purple'
+
+inputs:
+  # --- Auth & endpoint -----------------------------------------------------
+  api-key:
+    description: 'Scout bearer key (conventionally ${{ secrets.SCOUT_API_KEY }}).'
+    required: true
+  endpoint:
+    description: 'Scout bearer-API base URL.'
+    required: false
+    default: 'https://scout-api.downloadserver.co.uk'
+
+  # --- LLM orientation -----------------------------------------------------
+  system-name:
+    description: 'Short name of the system under review; defaults to repo name from $GITHUB_REPOSITORY.'
+    required: false
+    default: ''
+  model_guid:
+    description: >
+      Optional LiteLLM model alias (e.g. `claude-openai-proxy/claude-haiku-4-5`).
+      Empty = scout's currently configured default. Scout enforces what models
+      are available on the bearer's account.
+    required: false
+    default: ''
+  temperature:
+    description: >
+      Optional sampling temperature override. Empty = scout's default
+      (currently 0.2). 0.0 reduces non-determinism; >0.5 not recommended
+      for CI gating.
+    required: false
+    default: ''
+
+  # --- Input globs ---------------------------------------------------------
+  requirements-glob:
+    description: 'Glob of files that become items of type=requirement (e.g. "docs/specs/**/*.md").'
+    required: false
+    default: ''
+  nfrs-glob:
+    description: 'Glob of files that become items of type=nfr.'
+    required: false
+    default: ''
+  tests-glob:
+    description: 'Glob of files that become items of type=test.'
+    required: false
+    default: ''
+  docs-glob:
+    description: 'Glob of files that become items of type=doc (catch-all / context).'
+    required: false
+    default: ''
+
+  # --- Cost control --------------------------------------------------------
+  max-input-bytes:
+    description: >
+      Hard cap on total bytes shipped per analyse call. Files are added in
+      requirements -> nfrs -> tests -> docs order; once the budget is
+      exhausted, remaining files are dropped (logged, not silent). Default
+      ~1 MB.
+    required: false
+    default: '1000000'
+  max-file-bytes:
+    description: >
+      Per-file cap. Files larger than this are truncated with a marker
+      `... [truncated at N bytes]` so the model knows the picture is partial.
+      Default 200 KB.
+    required: false
+    default: '200000'
+
+  # --- Strictness ----------------------------------------------------------
+  strictness:
+    description: >
+      One of `report-only` (default), `block-on-any-high`,
+      `block-on-high-medium`, `strict`, `custom`. Maps to per-severity
+      thresholds (see README). Per-severity inputs win if both are set.
+    required: false
+    default: 'report-only'
+  max-high:
+    description: 'Per-severity count cap. Empty = inherit from `strictness`.'
+    required: false
+    default: ''
+  max-medium:
+    description: 'Per-severity count cap. Empty = inherit from `strictness`.'
+    required: false
+    default: ''
+  max-low:
+    description: 'Per-severity count cap. Empty = inherit from `strictness`.'
+    required: false
+    default: ''
+  fail-on-upstream-error:
+    description: >
+      If scout / its upstream LLM returns 5xx, should the step fail?
+      Default false: warn in the summary and pass, so a scout outage
+      never blocks an unrelated PR.
+    required: false
+    default: 'false'
+
+  # --- PR comment ----------------------------------------------------------
+  comment-on-pr:
+    description: 'Post / update the findings summary as a PR comment.'
+    required: false
+    default: 'true'
+  comment-mode:
+    description: >
+      `update` (default; one rolling comment per PR keyed on
+      `<!-- scout-action -->` marker) or `append` (a fresh comment per run).
+    required: false
+    default: 'update'
+
+  # --- GitHub token (for PR comment) ---------------------------------------
+  github-token:
+    description: >
+      Token used to post the PR comment. Default is `${{ github.token }}`;
+      override only if you need a PAT (e.g. cross-repo comments).
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  execution-id:
+    description: >
+      Scout's numeric execution id for this run. Deep-link to scout UI is
+      `https://scout.downloadserver.co.uk/#/history/<execution-id>`. Note:
+      issue scout#28 originally called this `execution-guid`; scout's
+      bearer API exposes a stable numeric id rather than a GUID, so the
+      output is named `execution-id`.
+    value: ${{ steps.run.outputs.execution-id }}
+  findings-count:
+    description: 'Total findings returned (across all severities).'
+    value: ${{ steps.run.outputs.findings-count }}
+  max-severity:
+    description: '`high` | `medium` | `low` | `none`.'
+    value: ${{ steps.run.outputs.max-severity }}
+  findings-json-path:
+    description: 'Path on the runner to the raw findings JSON.'
+    value: ${{ steps.run.outputs.findings-json-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Run scout analyse'
+      id: run
+      shell: bash
+      env:
+        # Inputs are flattened into the env so the runtime script doesn't
+        # need to know about the composite-action wrapper. Keeps the script
+        # independently testable.
+        SCOUT_API_KEY: ${{ inputs.api-key }}
+        SCOUT_ENDPOINT: ${{ inputs.endpoint }}
+        SCOUT_SYSTEM_NAME: ${{ inputs.system-name }}
+        SCOUT_MODEL_GUID: ${{ inputs.model_guid }}
+        SCOUT_TEMPERATURE: ${{ inputs.temperature }}
+        SCOUT_REQUIREMENTS_GLOB: ${{ inputs.requirements-glob }}
+        SCOUT_NFRS_GLOB: ${{ inputs.nfrs-glob }}
+        SCOUT_TESTS_GLOB: ${{ inputs.tests-glob }}
+        SCOUT_DOCS_GLOB: ${{ inputs.docs-glob }}
+        SCOUT_MAX_INPUT_BYTES: ${{ inputs.max-input-bytes }}
+        SCOUT_MAX_FILE_BYTES: ${{ inputs.max-file-bytes }}
+        SCOUT_STRICTNESS: ${{ inputs.strictness }}
+        SCOUT_MAX_HIGH: ${{ inputs.max-high }}
+        SCOUT_MAX_MEDIUM: ${{ inputs.max-medium }}
+        SCOUT_MAX_LOW: ${{ inputs.max-low }}
+        SCOUT_FAIL_ON_UPSTREAM_ERROR: ${{ inputs.fail-on-upstream-error }}
+        SCOUT_COMMENT_ON_PR: ${{ inputs.comment-on-pr }}
+        SCOUT_COMMENT_MODE: ${{ inputs.comment-mode }}
+        SCOUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        SCOUT_ACTION_PATH: ${{ github.action_path }}
+      run: |
+        bash "${{ github.action_path }}/scripts/run.sh"
