@@ -1,0 +1,20 @@
+# MANAGED BY cluster-opentofu — do not edit by hand.
+# Drift is reconciled by Flux tofu-controller. To change the baseline,
+# change the reusable workflow in rhodium-org/shared-actions, or this
+# caller template in cluster-opentofu/files/.
+name: security-baseline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily — trips the repo red the day a suppression expires, with no
+    # human action. Off-peak, off the top-of-hour rush.
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  baseline:
+    uses: rhodium-org/shared-actions/.github/workflows/security-baseline.yml@v1
