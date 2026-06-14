@@ -17,4 +17,8 @@ on:
 
 jobs:
   baseline:
-    uses: rhodium-org/shared-actions/.github/workflows/security-baseline.yml@v1
+    # Reusable lives at security-baseline-reusable.yml (NOT security-baseline.yml):
+    # this caller is fanned out to security-baseline.yml in every repo INCLUDING
+    # shared-actions, so the reusable must sit on a different filename or the
+    # fan-out clobbers it with a self-referential call (the 2026-06-14 outage).
+    uses: rhodium-org/shared-actions/.github/workflows/security-baseline-reusable.yml@v1
