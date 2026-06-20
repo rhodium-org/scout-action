@@ -241,6 +241,7 @@ if [[ "$HTTP_CODE" != "200" ]]; then
   fi
   warn "scout call failed ($HTTP_CODE) — passing because fail-on-upstream-error=false: $detail"
   if [[ "$COMMENT_ON_PR" == "true" ]]; then
+    # shellcheck disable=SC2016  # backticks are literal markdown in printf formats, not command substitution
     {
       printf '<!-- scout-action -->\n'
       printf '## scout findings — upstream error\n\n'
@@ -280,6 +281,7 @@ write_output findings-json-path "$FINDINGS_PATH"
 
 DEEP_LINK="https://scout.downloadserver.co.uk/#/history/${EXEC_ID}"
 COMMENT_FILE="$WORK_DIR/comment.md"
+# shellcheck disable=SC2016  # backticks are literal markdown in printf formats, not command substitution
 {
   printf '<!-- scout-action -->\n'
   printf '## 🔍 scout findings (execution #%s)\n\n' "$EXEC_ID"
